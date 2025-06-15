@@ -12,7 +12,7 @@ const token = '7445313694:AAGOphwXa1pU2Urxvcm6UdMmf05oaZz5T40';
 if (!token) {
   console.error('TELEGRAM_BOT_TOKEN environment variable is not set!');
   process.exit(1);
-}
+}  
 
 // Create a bot that uses polling to fetch new updates
 const bot = new TelegramBot(token, { polling: true });
