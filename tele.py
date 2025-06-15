@@ -2,17 +2,15 @@ import logging
 import os
 import re
 import requests
-from readability import Document
 import edge_tts
 import asyncio
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from telegram import ChatAction
-from bs4 import BeautifulSoup
-from urllib.parse import urlparse
+from goose3 import Goose
 
 TELEGRAM_BOT_TOKEN = "7445313694:AAGOphwXa1pU2Urxvcm6UdMmf05oaZz5T40"
-MAX_CHAPTERS = 20  # Limit how many chapters to scrape in one run
-TARGET_NOVEL_KEYWORD = "Son of the Dragon"  # Validate novel title
+MAX_CHAPTERS = 20
+TARGET_NOVEL_KEYWORD = "Son of the Dragon"
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,13 +26,11 @@ def extract_slug_and_chapter(url):
     return None, None
 
 def scrape_content(url):
-    res = requests.get(url, timeout=10)
-    doc = Document(res.text)
-    title = doc.short_title()
-    content_html = doc.summary()
-    soup = BeautifulSoup(content_html, "html.parser")
-    clean_text = soup.get_text(separator="\n")
-    return title, clean_text
+    g = Goose()
+    article = g.extract(url=url)
+    title = article.title or "No Title"
+    content = article.cleaned_text or "Content not found."
+    return title.strip(), content.strip()
 
 async def text_to_speech(text, output_path):
     communicate = edge_tts.Communicate(text, voice="en-US-GuyNeural")
@@ -59,9 +55,9 @@ def handle_message(update, context):
         
         try:
             title, content = scrape_content(chapter_url)
-            
+
             if TARGET_NOVEL_KEYWORD.lower() not in title.lower():
-                context.bot.send_message(chat_id=chat_id, text=f"⚠️ Stopping at chapter {current_chapter}. Title mismatch detected: '{title}'")
+                context.bot.send_message(chat_id=chat_id, text=f"⚠️ Stopping at chapter {current_chapter}. Title mismatch: '{title}'")
                 break
 
             filename = f"downloads/{slug}_chapter_{current_chapter}.txt"
@@ -70,7 +66,7 @@ def handle_message(update, context):
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(content)
 
-            context.bot.send_message(chat_id=chat_id, text=f"📖 Chapter {current_chapter} scraped, generating audio...")
+            context.bot.send_message(chat_id=chat_id, text=f"📖 Chapter {current_chapter} scraped. Generating audio...")
             asyncio.run(text_to_speech(content, audio_file))
 
             context.bot.send_document(chat_id=chat_id, document=open(filename, "rb"), filename=os.path.basename(filename))
@@ -78,7 +74,7 @@ def handle_message(update, context):
 
             os.remove(filename)
             os.remove(audio_file)
-        
+
         except Exception as e:
             logger.error(e)
             context.bot.send_message(chat_id=chat_id, text=f"❌ Failed at Chapter {current_chapter}. Stopping.")
