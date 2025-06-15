@@ -7,7 +7,7 @@ import re
 from flask import Flask, request
 from telegram import Bot, Update, ChatAction
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters
-from bs4 import BeautifulSoup
+from goose3 import Goose
 
 # ENV variables
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -30,12 +30,10 @@ def extract_slug_and_chapter(url):
     return None, None
 
 def scrape_content(url):
-    res = requests.get(url, timeout=10)
-    soup = BeautifulSoup(res.text, "html.parser")
-    title_tag = soup.find("title")
-    content_div = soup.find("div", class_="chapter-content") or soup.find("div", class_="content")
-    title = title_tag.get_text() if title_tag else "No Title"
-    content = content_div.get_text(separator="\n") if content_div else "Content not found."
+    g = Goose()
+    article = g.extract(url=url)
+    title = article.title or "No Title"
+    content = article.cleaned_text or "Content not found."
     return title.strip(), content.strip()
 
 async def text_to_speech(text, output_path):
@@ -100,6 +98,5 @@ def index():
     return "Bot is running"
 
 if __name__ == '__main__':
-    # Register webhook once on startup
     bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
