@@ -4,8 +4,6 @@ const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
-const tts = require('node-tts');
-const ffmpeg = require('fluent-ffmpeg');
 
 // Get token from environment variable
 // const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -86,104 +84,13 @@ async function extractReadableContent(url) {
   }
 }
 
-// Add new function for text-to-speech conversion
-async function convertToSpeech(text, filename) {
-  return new Promise((resolve, reject) => {
-    try {
-      // Split text into smaller chunks to handle long texts
-      const chunks = splitTextIntoChunks(text, 1000);
-      const tempFiles = [];
-      let currentChunk = 0;
-
-      function processNextChunk() {
-        if (currentChunk >= chunks.length) {
-          // All chunks processed, now combine them
-          combineAudioFiles(tempFiles, filename)
-            .then(() => {
-              // Clean up temp files
-              tempFiles.forEach(file => fs.unlinkSync(file));
-              resolve(true);
-            })
-            .catch(reject);
-          return;
-        }
-
-        const tempFile = `temp_${Date.now()}_${currentChunk}.wav`;
-        tempFiles.push(tempFile);
-
-        tts.speak({
-          text: chunks[currentChunk],
-          voice: 'en-US',
-          speed: 1.0,
-          output: tempFile
-        }, (err) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          currentChunk++;
-          processNextChunk();
-        });
-      }
-
-      processNextChunk();
-    } catch (error) {
-      console.error('Error in text-to-speech conversion:', error);
-      reject(error);
-    }
-  });
+function saveToFile(title, content, chapterNumber) {
+  const filename = `chapter_${chapterNumber}_${Date.now()}.txt`;
+  const filepath = path.join(__dirname, filename);
+  fs.writeFileSync(filepath, `Title: ${title}\n\n${content}`, 'utf8');
+  return filename;
 }
 
-// Helper function to split text into smaller chunks
-function splitTextIntoChunks(text, maxLength) {
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  const chunks = [];
-  let currentChunk = '';
-
-  for (const sentence of sentences) {
-    if ((currentChunk + sentence).length > maxLength) {
-      if (currentChunk) chunks.push(currentChunk.trim());
-      currentChunk = sentence;
-    } else {
-      currentChunk += sentence;
-    }
-  }
-  if (currentChunk) chunks.push(currentChunk.trim());
-  return chunks;
-}
-
-// Helper function to combine multiple audio files
-async function combineAudioFiles(inputFiles, outputFile) {
-  return new Promise((resolve, reject) => {
-    const command = ffmpeg();
-    
-    inputFiles.forEach(file => {
-      command.input(file);
-    });
-
-    command
-      .on('end', resolve)
-      .on('error', reject)
-      .mergeToFile(outputFile);
-  });
-}
-
-// Modify saveToFile function to also generate audio
-async function saveToFile(title, content, chapterNumber) {
-  const textFilename = `chapter_${chapterNumber}_${Date.now()}.txt`;
-  const audioFilename = `chapter_${chapterNumber}_${Date.now()}.mp3`;
-  const textFilepath = path.join(__dirname, textFilename);
-  const audioFilepath = path.join(__dirname, audioFilename);
-  
-  fs.writeFileSync(textFilepath, `Title: ${title}\n\n${content}`, 'utf8');
-  
-  // Convert content to speech
-  await convertToSpeech(content, audioFilepath);
-  
-  return { textFilename, audioFilename };
-}
-
-// Modify processChapter function to send both text and audio
 async function processChapter(url, chatId, originalTitle = null) {
   try {
     const urlObj = new URL(url);
@@ -204,27 +111,18 @@ async function processChapter(url, chatId, originalTitle = null) {
     }
     
     const chapterNumber = extractChapterNumber(url);
-    const { textFilename, audioFilename } = await saveToFile(article.title, article.content, chapterNumber);
+    const filename = saveToFile(article.title, article.content, chapterNumber);
     
-    // Send text file
-    const docMessage = await bot.sendDocument(chatId, textFilename, {
+    const docMessage = await bot.sendDocument(chatId, filename, {
       caption: `📚 Chapter ${chapterNumber}: ${article.title}`,
+      contentType: 'text/plain'
+    }, {
+      filename: filename,
       contentType: 'text/plain'
     });
     storeMessage(chatId, docMessage.message_id);
     
-    // Send audio file
-    const audioMessage = await bot.sendAudio(chatId, audioFilename, {
-      caption: `🎧 Audio version of Chapter ${chapterNumber}: ${article.title}`,
-      title: article.title,
-      performer: 'Story Bot'
-    });
-    storeMessage(chatId, audioMessage.message_id);
-    
-    // Clean up files
-    fs.unlinkSync(textFilename);
-    fs.unlinkSync(audioFilename);
-    
+    fs.unlinkSync(filename);
     return article.title;
   } catch (error) {
     console.error('Error processing chapter:', error);
