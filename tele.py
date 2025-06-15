@@ -1,32 +1,28 @@
-import logging
 import os
-import re
+import logging
 import requests
 import edge_tts
 import asyncio
+import re
 from flask import Flask, request
 from telegram import Bot, Update, ChatAction
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters
 from bs4 import BeautifulSoup
 
-# Environment variables
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-app-name.onrender.com
-PORT = int(os.getenv("PORT", 5000))
+# ENV variables
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+bot = Bot(TOKEN)
+app = Flask(__name__)
+
+# Setup dispatcher
+dispatcher = Dispatcher(bot, None, workers=0)
+
 MAX_CHAPTERS = 20
 TARGET_NOVEL_KEYWORD = "Son of the Dragon"
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-os.makedirs("downloads", exist_ok=True)
-
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
-app = Flask(__name__)
-dispatcher = Dispatcher(bot, None, workers=0)
-
 def extract_slug_and_chapter(url):
-    match = re.search(r'liddread\.com/([^/]+)-chapter-(\d+)/', url)
+    match = re.search(r'liddread\\.com/([^/]+)-chapter-(\\d+)/', url)
     if match:
         slug = match.group(1)
         chapter = int(match.group(2))
@@ -52,50 +48,48 @@ def handle_message(update, context):
 
     slug, chapter_num = extract_slug_and_chapter(url)
     if not slug or not chapter_num:
-        bot.send_message(chat_id=chat_id, text="❌ Invalid URL format. Please send me a Liddread chapter URL.")
+        bot.send_message(chat_id=chat_id, text="❌ Invalid URL format.")
         return
 
     bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-    bot.send_message(chat_id=chat_id, text=f"🔎 Starting from Chapter {chapter_num}. Processing up to {MAX_CHAPTERS} chapters.")
+    bot.send_message(chat_id=chat_id, text=f"🔎 Starting from Chapter {chapter_num}")
 
     for i in range(MAX_CHAPTERS):
         current_chapter = chapter_num + i
         chapter_url = f"https://liddread.com/{slug}-chapter-{current_chapter}/"
-        logger.info(f"Fetching {chapter_url}")
-        
         try:
             title, content = scrape_content(chapter_url)
             if TARGET_NOVEL_KEYWORD.lower() not in title.lower():
-                bot.send_message(chat_id=chat_id, text=f"⚠️ Stopping at chapter {current_chapter}. Title mismatch: '{title}'")
+                bot.send_message(chat_id=chat_id, text=f"⚠️ Stopping at Chapter {current_chapter}")
                 break
 
-            filename = f"downloads/{slug}_chapter_{current_chapter}.txt"
-            audio_file = f"downloads/{slug}_chapter_{current_chapter}.mp3"
+            filename = f"{slug}_chapter_{current_chapter}.txt"
+            audio_file = f"{slug}_chapter_{current_chapter}.mp3"
 
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(content)
 
-            bot.send_message(chat_id=chat_id, text=f"📖 Chapter {current_chapter} scraped. Generating audio...")
+            bot.send_message(chat_id=chat_id, text="Generating audio...")
             asyncio.run(text_to_speech(content, audio_file))
 
-            bot.send_document(chat_id=chat_id, document=open(filename, "rb"), filename=os.path.basename(filename))
-            bot.send_audio(chat_id=chat_id, audio=open(audio_file, "rb"), title=title)
+            bot.send_document(chat_id=chat_id, document=open(filename, "rb"))
+            bot.send_audio(chat_id=chat_id, audio=open(audio_file, "rb"))
 
             os.remove(filename)
             os.remove(audio_file)
 
         except Exception as e:
-            logger.error(e)
-            bot.send_message(chat_id=chat_id, text=f"❌ Failed at Chapter {current_chapter}. Stopping.")
+            bot.send_message(chat_id=chat_id, text="❌ Failed to process.")
             break
 
 def start(update, context):
-    update.message.reply_text("Send me a Liddread chapter URL to scrape and convert multiple chapters to audio.")
+    update.message.reply_text("Send me a Liddread URL")
 
+# Setup handlers
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
-@app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
+@app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
     dispatcher.process_update(update)
@@ -106,5 +100,6 @@ def index():
     return "Bot is running"
 
 if __name__ == '__main__':
-    bot.set_webhook(f"{WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
-    app.run(host="0.0.0.0", port=PORT)
+    # Register webhook once on startup
+    bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
