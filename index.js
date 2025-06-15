@@ -6,7 +6,6 @@ const fs = require('fs');
 const path = require('path');
 const tts = require('node-tts');
 const ffmpeg = require('fluent-ffmpeg');
-const say = require('say');
 
 // Get token from environment variable
 // const token = process.env.TELEGRAM_BOT_TOKEN;
