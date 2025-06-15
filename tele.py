@@ -22,7 +22,7 @@ MAX_CHAPTERS = 20
 TARGET_NOVEL_KEYWORD = "Son of the Dragon"
 
 def extract_slug_and_chapter(url):
-    match = re.search(r'liddread\\.com/([^/]+)-chapter-(\\d+)/', url)
+    match = re.search(r'liddread\.com/([^/]+)-chapter-(\d+)/', url)
     if match:
         slug = match.group(1)
         chapter = int(match.group(2))
