@@ -11,6 +11,8 @@
     "axios": "^1.6.7",
     "@mozilla/readability": "^0.4.4",
     "jsdom": "^24.0.0",
-    "dotenv": "^16.4.1"
+    "dotenv": "^16.4.1",
+    "node-tts": "^0.0.1",
+    "fluent-ffmpeg": "^2.1.2"
   }
 } 
