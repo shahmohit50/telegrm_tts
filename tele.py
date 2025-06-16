@@ -8,6 +8,7 @@ from flask import Flask, request
 from telegram import Bot, Update, ChatAction
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters
 from goose3 import Goose
+from collections import deque
 
 # ENV variables
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -17,6 +18,9 @@ app = Flask(__name__)
 
 # Setup dispatcher
 dispatcher = Dispatcher(bot, None, workers=0)
+
+# Deduplication buffer: keep last 500 updates (tune as needed)
+processed_updates = deque(maxlen=500)
 
 MAX_CHAPTERS = 20
 TARGET_NOVEL_KEYWORD = "Son of the Dragon"
@@ -90,6 +94,9 @@ dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_me
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
+    if update.update_id in processed_updates:
+        return "duplicate"
+    processed_updates.append(update.update_id)
     dispatcher.process_update(update)
     return "ok"
 
