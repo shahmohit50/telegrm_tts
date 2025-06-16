@@ -123,7 +123,7 @@ def handle_message(update, context):
 
             bot.send_message(chat_id=chat_id, text="Generating audio...")
             # asyncio.run(text_to_speech(content, audio_file))
-            asyncio.run(text_to_speech_with_basic_gender(content, audio_file))
+            asyncio.run(text_to_speech_with_dialogue_and_narration(content, audio_file))
 
             bot.send_document(chat_id=chat_id, document=open(filename, "rb"))
             bot.send_audio(chat_id=chat_id, audio=open(audio_file, "rb"))
