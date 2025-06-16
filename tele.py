@@ -46,27 +46,42 @@ def scrape_content(url):
 #     communicate = edge_tts.Communicate(text, voice="en-US-GuyNeural")
 #     await communicate.save(output_path)
 
-async def text_to_speech_with_basic_gender(text, output_path):
+async def text_to_speech_with_dialogue_and_narration(full_text, output_path):
     dialogues = []
+    narrator_voice = "en-US-AriaNeural"  # Narrator voice
 
-    # Extract quoted text (very basic dialogue detection)
-    matches = re.findall(r'“(.*?)”', text)  # Use real double quotes
-    if not matches:
-        matches = re.findall(r'"(.*?)"', text)  # Fallback for standard quotes
+    # Split text into paragraphs (very simple split for now)
+    paragraphs = full_text.split('\n')
 
-    if not matches:
-        # No dialogues detected, fallback to entire text
-        dialogues.append((text, "neutral"))
-    else:
-        for sentence in matches:
-            # Random gender assignment for prototype
-            gender = random.choice(["male", "female"])
-            dialogues.append((sentence, gender))
+    for para in paragraphs:
+        # Clean empty lines
+        para = para.strip()
+        if not para:
+            continue
 
-    # Generate audio files for each dialogue
+        # Check for dialogue inside quotes
+        matches = re.findall(r'“(.*?)”', para)
+        if not matches:
+            matches = re.findall(r'"(.*?)"', para)
+
+        if matches:
+            # There may be multiple quotes inside paragraph
+            for sentence in matches:
+                gender = random.choice(["male", "female"])  # Simple random gender for now
+                dialogues.append((sentence, gender))
+        else:
+            # Narration part
+            dialogues.append((para, "narrator"))
+
     filenames = []
-    for i, (sentence, gender) in enumerate(dialogues):
-        voice = "en-US-GuyNeural" if gender == "male" else "en-US-JennyNeural"
+    for i, (sentence, role) in enumerate(dialogues):
+        if role == "male":
+            voice = "en-US-GuyNeural"
+        elif role == "female":
+            voice = "en-US-JennyNeural"
+        else:
+            voice = narrator_voice
+
         temp_output = f"part_{i}.mp3"
         communicate = edge_tts.Communicate(sentence, voice=voice)
         await communicate.save(temp_output)
