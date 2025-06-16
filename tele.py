@@ -1,4 +1,6 @@
 import os
+import random
+import re
 import logging
 import requests
 import edge_tts
@@ -40,9 +42,42 @@ def scrape_content(url):
     content = article.cleaned_text or "Content not found."
     return title.strip(), content.strip()
 
-async def text_to_speech(text, output_path):
-    communicate = edge_tts.Communicate(text, voice="en-US-GuyNeural")
-    await communicate.save(output_path)
+# async def text_to_speech(text, output_path):
+#     communicate = edge_tts.Communicate(text, voice="en-US-GuyNeural")
+#     await communicate.save(output_path)
+
+async def text_to_speech_with_basic_gender(text, output_path):
+    dialogues = []
+
+    # Extract quoted text (very basic dialogue detection)
+    matches = re.findall(r'“(.*?)”', text)  # Use real double quotes
+    if not matches:
+        matches = re.findall(r'"(.*?)"', text)  # Fallback for standard quotes
+
+    if not matches:
+        # No dialogues detected, fallback to entire text
+        dialogues.append((text, "neutral"))
+    else:
+        for sentence in matches:
+            # Random gender assignment for prototype
+            gender = random.choice(["male", "female"])
+            dialogues.append((sentence, gender))
+
+    # Generate audio files for each dialogue
+    filenames = []
+    for i, (sentence, gender) in enumerate(dialogues):
+        voice = "en-US-GuyNeural" if gender == "male" else "en-US-JennyNeural"
+        temp_output = f"part_{i}.mp3"
+        communicate = edge_tts.Communicate(sentence, voice=voice)
+        await communicate.save(temp_output)
+        filenames.append(temp_output)
+
+    # Merge files into final output
+    with open(output_path, "wb") as out_file:
+        for file in filenames:
+            with open(file, "rb") as f:
+                out_file.write(f.read())
+            os.remove(file)
 
 def handle_message(update, context):
     chat_id = update.effective_chat.id
@@ -72,7 +107,8 @@ def handle_message(update, context):
                 f.write(content)
 
             bot.send_message(chat_id=chat_id, text="Generating audio...")
-            asyncio.run(text_to_speech(content, audio_file))
+            # asyncio.run(text_to_speech(content, audio_file))
+            asyncio.run(text_to_speech_with_basic_gender(content, audio_file))
 
             bot.send_document(chat_id=chat_id, document=open(filename, "rb"))
             bot.send_audio(chat_id=chat_id, audio=open(audio_file, "rb"))
