@@ -188,6 +188,8 @@ def handle_message(update, context):
 
         except Exception as e:
             bot.send_message(chat_id=chat_id, text="❌ Failed to process.")
+            bot.send_message(chat_id=chat_id, text="Error: " + str(e))
+            logging.error(f"Error processing chapter {current_chapter}: {e}")
             break
 
 def start(update, context):
