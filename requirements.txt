@@ -4,4 +4,6 @@ requests
 edge-tts
 flask
 goose3
+gender-guesser
+
 

@@ -11,6 +11,8 @@ from telegram import Bot, Update, ChatAction
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters
 from goose3 import Goose
 from collections import deque
+import gender_guesser.detector as gender_detector
+
 
 # ENV variables
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -23,6 +25,9 @@ dispatcher = Dispatcher(bot, None, workers=0)
 
 # Deduplication buffer: keep last 500 updates (tune as needed)
 processed_updates = deque(maxlen=500)
+
+detector = gender_detector.Detector(case_sensitive=False)
+
 
 MAX_CHAPTERS = 20
 TARGET_NOVEL_KEYWORD = "Son of the Dragon"
@@ -42,13 +47,67 @@ def scrape_content(url):
     content = article.cleaned_text or "Content not found."
     return title.strip(), content.strip()
 
+def detect_gender_from_speaker(tail):
+    tail = tail.lower()
+
+    # Try detecting a name in the tail
+    name_match = re.search(r"(?:said|replied|asked|yelled|shouted|cried)\\s+(\\w+\\s?\\w*)", tail)
+    if name_match:
+        name = name_match.group(1).strip()
+        g = detector.get_gender(name.split()[0])  # First name only
+        if g in ['male', 'mostly_male']:
+            return 'male'
+        elif g in ['female', 'mostly_female']:
+            return 'female'
+
+    # Heuristic checks
+    if any(word in tail for word in ['old man', 'boy', 'elder', 'father', 'young master']):
+        return 'male'
+    elif any(word in tail for word in ['girl', 'mother', 'aunt', 'sister']):
+        return 'female'
+
+    # Fallback
+    return random.choice(['male', 'female'])
+
+def split_paragraph_with_speaker_attribution(para):
+    pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
+    matches = pattern.findall(para)
+    segments = []
+
+    if not matches:
+        return [(para.strip(), "narrator")]
+
+    for quote, quote_text, tail in matches:
+        gender = detect_gender_from_speaker(tail)
+        segments.append((quote_text.strip(), gender))
+
+        if tail:
+            segments.append((tail.strip(), "narrator"))
+
+    return segments
+
+# def split_paragraph_with_quotes(para):
+#     parts = re.split(r'(\".*?\"|“.*?”)', para)
+#     segments = []
+#     for part in parts:
+#         part = part.strip()
+#         if not part:
+#             continue
+#         if (part.startswith('"') and part.endswith('"')) or (part.startswith('“') and part.endswith('”')):
+#             gender = random.choice(["male", "female"])
+#             segments.append((part.strip('“”"'), gender))
+#         else:
+#             segments.append((part, "narrator"))
+#     return segments
+
+
 # async def text_to_speech(text, output_path):
 #     communicate = edge_tts.Communicate(text, voice="en-US-GuyNeural")
 #     await communicate.save(output_path)
 
 async def text_to_speech_with_dialogue_and_narration(full_text, output_path):
     dialogues = []
-    narrator_voice = "en-US-AriaNeural"  # Narrator voice
+    narrator_voice = "en-GB-LibbyNeural"  # Narrator voice
 
     # Split text into paragraphs (very simple split for now)
     paragraphs = full_text.split('\n')
@@ -58,32 +117,28 @@ async def text_to_speech_with_dialogue_and_narration(full_text, output_path):
         para = para.strip()
         if not para:
             continue
-
-        # Check for dialogue inside quotes
-        matches = re.findall(r'“(.*?)”', para)
-        if not matches:
-            matches = re.findall(r'"(.*?)"', para)
-
-        if matches:
-            # There may be multiple quotes inside paragraph
-            for sentence in matches:
-                gender = random.choice(["male", "female"])  # Simple random gender for now
-                dialogues.append((sentence, gender))
-        else:
-            # Narration part
-            dialogues.append((para, "narrator"))
+        # segments = split_paragraph_with_quotes(para)
+        segments = split_paragraph_with_speaker_attribution(para)
+        dialogues.extend(segments)
 
     filenames = []
     for i, (sentence, role) in enumerate(dialogues):
         if role == "male":
             voice = "en-US-GuyNeural"
+            ssml = sentence
         elif role == "female":
             voice = "en-US-JennyNeural"
+            ssml = sentence
         else:
             voice = narrator_voice
+            ssml = f'<speak><voice name="{voice}"><prosody pitch="-10%" rate="95%">{sentence}</prosody></voice></speak>'
 
         temp_output = f"part_{i}.mp3"
-        communicate = edge_tts.Communicate(sentence, voice=voice)
+        if role == "narrator":
+            communicate = edge_tts.Communicate(ssml, voice=voice, ssml=True)
+        else:
+            communicate = edge_tts.Communicate(ssml, voice=voice)
+        # communicate = edge_tts.Communicate(sentence, voice=voice)
         await communicate.save(temp_output)
         filenames.append(temp_output)
 
