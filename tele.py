@@ -135,11 +135,16 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
         try:
             communicate = edge_tts.Communicate(sentence, voice=voice)
             await communicate.save(temp_output)
+
+            if os.path.exists(temp_output) and os.path.getsize(temp_output) > 100:
+                filenames.append(temp_output)
+            else:
+                logging.warning(f"🛑 Empty or missing audio for part {i} — voice={voice}")
         except Exception as e:
             logging.exception(f"❌ TTS failed for voice {voice} and sentence: {sentence}")
             continue
         
-        filenames.append(temp_output)
+       
 
     with open(output_path, "wb") as out_file:
         for file in filenames:
