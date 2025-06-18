@@ -134,12 +134,12 @@ async def text_to_speech_with_dialogue_and_narration(full_text, output_path):
             voice = narrator_voice
             safe_sentence = html.escape(sentence)
             # ssml = f'<speak><voice name="{voice}"><prosody pitch="-10%" rate="95%">{sentence}</prosody></voice></speak>'
-            ssml = f'<speak><voice name="{voice}"><prosody pitch="-10%" rate="95%">{safe_sentence}</prosody></voice></speak>'
+            ssml = f'<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'><voice name="{voice}"><prosody pitch="-10%" rate="95%">{safe_sentence}</prosody></voice></speak>'
         temp_output = f"part_{i}.mp3"
         if role == "narrator":
-            communicate = edge_tts.Communicate(ssml)
+            communicate = edge_tts.Communicate(ssml, voice=voice )
         else:
-            communicate = edge_tts.Communicate(ssml)
+            communicate = edge_tts.Communicate(ssml, voice=voice )
         # communicate = edge_tts.Communicate(sentence, voice=voice)
         await communicate.save(temp_output)
         filenames.append(temp_output)
