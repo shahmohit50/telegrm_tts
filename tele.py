@@ -42,7 +42,6 @@ available_voices = [
 character_voice_map = {}
 user_context = {}
 
-
 def extract_slug_and_chapter(url):
     match = re.search(r'liddread\.com/([^/]+)-chapter-(\d+)/', url)
     if match:
@@ -51,7 +50,6 @@ def extract_slug_and_chapter(url):
         return slug, chapter
     return None, None
 
-
 def scrape_content(url):
     g = Goose()
     article = g.extract(url=url)
@@ -59,14 +57,12 @@ def scrape_content(url):
     content = article.cleaned_text or "Content not found."
     return title.strip(), content.strip()
 
-
 def translate_text(text, target_lang="es"):
     try:
         return GoogleTranslator(source="auto", target=target_lang).translate(text)
     except Exception as e:
         logging.warning(f"Translation failed: {e}")
         return text
-
 
 def detect_speaker_name(tail):
     tail = tail.lower()
@@ -78,7 +74,6 @@ def detect_speaker_name(tail):
     elif 'girl' in tail:
         return 'girl'
     return 'unknown'
-
 
 def split_paragraph_with_speaker_attribution(para):
     pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
@@ -97,14 +92,12 @@ def split_paragraph_with_speaker_attribution(para):
 
     return segments
 
-
 def assign_voice_for_speaker(name):
     if name not in character_voice_map:
         unused = [v for v in available_voices if v not in character_voice_map.values() and v != narrator_voice]
         voice = random.choice(unused or available_voices)
         character_voice_map[name] = voice
     return character_voice_map[name]
-
 
 async def text_to_speech_with_speaker_attribution(full_text, output_path, translate=False, lang_code="es"):
     if translate:
@@ -121,7 +114,12 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
 
     filenames = []
     for i, (sentence, speaker_name) in enumerate(dialogues):
-        if speaker_name == "narrator":
+        if not sentence.strip():
+            continue
+
+        if lang_code == "hi":
+            voice = "hi-IN-MadhurNeural"
+        elif speaker_name == "narrator":
             voice = narrator_voice
         elif speaker_name == "unknown":
             voice = random.choice([v for v in available_voices if v != narrator_voice])
@@ -138,7 +136,6 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
             with open(file, "rb") as f:
                 out_file.write(f.read())
             os.remove(file)
-
 
 def handle_message(update, context):
     chat_id = update.effective_chat.id
