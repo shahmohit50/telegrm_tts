@@ -127,11 +127,6 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
             voice = assign_voice_for_speaker(speaker_name)
 
         temp_output = f"part_{i}.mp3"
-        if os.path.getsize(temp_output) == 0:
-            logging.warning(f"Empty audio generated for part {i}")
-            os.remove(temp_output)
-            continue
-
         try:
             communicate = edge_tts.Communicate(sentence, voice=voice)
             await communicate.save(temp_output)
@@ -141,16 +136,16 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
             else:
                 logging.warning(f"🛑 Empty or missing audio for part {i} — voice={voice}")
         except Exception as e:
-            logging.exception(f"❌ TTS failed for voice {voice} and sentence: {sentence}")
-            continue
-        
-       
+            logging.exception(f"❌ TTS failed for part {i} — voice={voice}, text={sentence}")
 
     with open(output_path, "wb") as out_file:
         for file in filenames:
-            with open(file, "rb") as f:
-                out_file.write(f.read())
-            os.remove(file)
+            if os.path.exists(file):
+                with open(file, "rb") as f:
+                    out_file.write(f.read())
+                os.remove(file)
+            else:
+                logging.warning(f"⚠️ Skipped missing audio file: {file}")
 
 def handle_message(update, context):
     chat_id = update.effective_chat.id
