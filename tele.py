@@ -132,7 +132,7 @@ async def text_to_speech_with_dialogue_and_narration(full_text, output_path):
             ssml = sentence
         else:
             voice = narrator_voice
-            ssml = sentance 
+            ssml = sentence 
             #safe_sentence = html.escape(sentence)
             
             # ssml = f'<speak><voice name="{voice}"><prosody pitch="-10%" rate="95%">{sentence}</prosody></voice></speak>'
