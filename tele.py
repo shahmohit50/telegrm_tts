@@ -9,10 +9,12 @@ import json
 import html
 from flask import Flask, request
 from telegram import Bot, Update, ChatAction
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from goose3 import Goose
 from collections import deque
 import gender_guesser.detector as gender_detector
+from deep_translator import GoogleTranslator
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
@@ -28,7 +30,6 @@ TARGET_NOVEL_KEYWORD = "Son of the Dragon"
 narrator_voice = "en-GB-LibbyNeural"
 detector = gender_detector.Detector(case_sensitive=False)
 
-# Distinct voice pool
 available_voices = [
     "en-US-GuyNeural",
     "en-US-DavisNeural",
@@ -38,9 +39,9 @@ available_voices = [
     "en-AU-NatashaNeural",
     "en-IN-NeerjaNeural"
 ]
-
-# Character voice memory
 character_voice_map = {}
+user_context = {}
+
 
 def extract_slug_and_chapter(url):
     match = re.search(r'liddread\.com/([^/]+)-chapter-(\d+)/', url)
@@ -50,12 +51,22 @@ def extract_slug_and_chapter(url):
         return slug, chapter
     return None, None
 
+
 def scrape_content(url):
     g = Goose()
     article = g.extract(url=url)
     title = article.title or "No Title"
     content = article.cleaned_text or "Content not found."
     return title.strip(), content.strip()
+
+
+def translate_text(text, target_lang="es"):
+    try:
+        return GoogleTranslator(source="auto", target=target_lang).translate(text)
+    except Exception as e:
+        logging.warning(f"Translation failed: {e}")
+        return text
+
 
 def detect_speaker_name(tail):
     tail = tail.lower()
@@ -67,6 +78,7 @@ def detect_speaker_name(tail):
     elif 'girl' in tail:
         return 'girl'
     return 'unknown'
+
 
 def split_paragraph_with_speaker_attribution(para):
     pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
@@ -85,6 +97,7 @@ def split_paragraph_with_speaker_attribution(para):
 
     return segments
 
+
 def assign_voice_for_speaker(name):
     if name not in character_voice_map:
         unused = [v for v in available_voices if v not in character_voice_map.values() and v != narrator_voice]
@@ -92,7 +105,11 @@ def assign_voice_for_speaker(name):
         character_voice_map[name] = voice
     return character_voice_map[name]
 
-async def text_to_speech_with_speaker_attribution(full_text, output_path):
+
+async def text_to_speech_with_speaker_attribution(full_text, output_path, translate=False, lang_code="es"):
+    if translate:
+        full_text = translate_text(full_text, target_lang=lang_code)
+
     dialogues = []
     paragraphs = full_text.split('\n')
     for para in paragraphs:
@@ -122,17 +139,45 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path):
                 out_file.write(f.read())
             os.remove(file)
 
+
 def handle_message(update, context):
     chat_id = update.effective_chat.id
     url = update.message.text.strip()
-
     slug, chapter_num = extract_slug_and_chapter(url)
     if not slug or not chapter_num:
         bot.send_message(chat_id=chat_id, text="❌ Invalid URL format.")
         return
 
+    user_context[chat_id] = {"slug": slug, "chapter": chapter_num, "url": url}
+
+    keyboard = [
+        [
+            InlineKeyboardButton("Translate to Spanish", callback_data="translate_es"),
+            InlineKeyboardButton("Translate to Hindi", callback_data="translate_hi")
+        ],
+        [InlineKeyboardButton("Keep Original (English)", callback_data="original")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    bot.send_message(chat_id=chat_id, text="🌐 Do you want to translate the content before audio generation?", reply_markup=reply_markup)
+
+
+def handle_translation_choice(update, context):
+    query = update.callback_query
+    chat_id = query.message.chat_id
+    choice = query.data
+
     bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-    bot.send_message(chat_id=chat_id, text=f"🔎 Starting from Chapter {chapter_num}")
+    bot.edit_message_text(chat_id=chat_id, message_id=query.message.message_id, text="📖 Processing your request...")
+
+    context_data = user_context.get(chat_id, {})
+    slug = context_data.get("slug")
+    chapter_num = context_data.get("chapter")
+
+    lang_code = "en"
+    translate_flag = False
+    if choice.startswith("translate_"):
+        translate_flag = True
+        lang_code = choice.split("_")[1]
 
     for i in range(MAX_CHAPTERS):
         current_chapter = chapter_num + i
@@ -149,8 +194,8 @@ def handle_message(update, context):
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(content)
 
-            bot.send_message(chat_id=chat_id, text="Generating audio...")
-            asyncio.run(text_to_speech_with_speaker_attribution(content, audio_file))
+            bot.send_message(chat_id=chat_id, text="🔊 Generating audio...")
+            asyncio.run(text_to_speech_with_speaker_attribution(content, audio_file, translate=translate_flag, lang_code=lang_code))
 
             bot.send_document(chat_id=chat_id, document=open(filename, "rb"))
             bot.send_audio(chat_id=chat_id, audio=open(audio_file, "rb"))
@@ -163,11 +208,15 @@ def handle_message(update, context):
             bot.send_message(chat_id=chat_id, text=f"❌ Failed to process: {e}")
             break
 
+
 def start(update, context):
     update.message.reply_text("Send me a Liddread URL")
 
+
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+dispatcher.add_handler(CallbackQueryHandler(handle_translation_choice))
+
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
@@ -178,9 +227,11 @@ def webhook():
     dispatcher.process_update(update)
     return "ok"
 
+
 @app.route("/")
 def index():
     return "Bot is running"
+
 
 if __name__ == '__main__':
     bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
