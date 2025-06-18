@@ -11,6 +11,7 @@ from telegram import Bot, Update, ChatAction
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters
 from goose3 import Goose
 from collections import deque
+import html
 import gender_guesser.detector as gender_detector
 
 
@@ -131,8 +132,9 @@ async def text_to_speech_with_dialogue_and_narration(full_text, output_path):
             ssml = sentence
         else:
             voice = narrator_voice
-            ssml = f'<speak><voice name="{voice}"><prosody pitch="-10%" rate="95%">{sentence}</prosody></voice></speak>'
-
+            safe_sentence = html.escape(sentence)
+            # ssml = f'<speak><voice name="{voice}"><prosody pitch="-10%" rate="95%">{sentence}</prosody></voice></speak>'
+            ssml = f'<speak><voice name="{voice}"><prosody pitch="-10%" rate="95%">{safe_sentence}</prosody></voice></speak>'
         temp_output = f"part_{i}.mp3"
         if role == "narrator":
             communicate = edge_tts.Communicate(ssml, voice=voice)
