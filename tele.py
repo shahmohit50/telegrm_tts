@@ -79,18 +79,34 @@ def split_paragraph_with_speaker_attribution(para):
     pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
     matches = pattern.findall(para)
     segments = []
-
     if not matches:
         return [(para.strip(), "narrator")]
 
-    for quote, quote_text, tail in matches:
-        speaker = detect_speaker_name(tail)
-        segments.append((quote_text.strip(), speaker))
+    # If no quotes are found, treat it as narration
+    if not matches:
+        return [(para.strip(), "narrator")]
 
-        if tail:
-            segments.append((tail.strip(), "narrator"))
+    # For each match (quote and tail), split the text
+    for quote, quote_text, tail in matches:
+        if quote_text.strip():
+            segments.append((quote_text.strip(), "character"))  # dialogue part
+
+        if tail.strip():
+            segments.append((tail.strip(), "narrator"))  # narrative part
 
     return segments
+    
+    #if not matches:
+       # return [(para.strip(), "narrator")]
+
+   # for quote, quote_text, tail in matches:
+        #speaker = detect_speaker_name(tail)
+      #  segments.append((quote_text.strip(), speaker))
+
+     #   if tail:
+       #     segments.append((tail.strip(), "narrator"))
+
+    #return segments
 
 def assign_voice_for_speaker(name):
     if name not in character_voice_map:
