@@ -42,6 +42,7 @@ available_voices = [
 character_voice_map = {}
 user_context = {}
 
+
 def extract_slug_and_chapter(url):
     match = re.search(r'liddread\.com/([^/]+)-chapter-(\d+)/', url)
     if match:
@@ -50,6 +51,7 @@ def extract_slug_and_chapter(url):
         return slug, chapter
     return None, None
 
+
 def scrape_content(url):
     g = Goose()
     article = g.extract(url=url)
@@ -57,12 +59,14 @@ def scrape_content(url):
     content = article.cleaned_text or "Content not found."
     return title.strip(), content.strip()
 
+
 def translate_text(text, target_lang="es"):
     try:
         return GoogleTranslator(source="auto", target=target_lang).translate(text)
     except Exception as e:
         logging.warning(f"Translation failed: {e}")
         return text
+
 
 def detect_speaker_name(tail):
     tail = tail.lower()
@@ -75,63 +79,34 @@ def detect_speaker_name(tail):
         return 'girl'
     return 'unknown'
 
+
 def split_paragraph_with_speaker_attribution(para):
-     pattern = re.compile(r'([“"])(.+?)([”"])(?=\s|$)')  # Matches any quoted segment
-    #pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
-    #matches = pattern.findall(para)
-     segments = []
-     last_end = 0
+    pattern = re.compile(r'([“"])(.+?)([”"])(?=\s|$)')  # Matches any quoted segment
+    segments = []
+    last_end = 0
 
-     for match in pattern.finditer(para):
-         start, end = match.span()
-         # Add narration before the quote
-         if start > last_end:
-             narration = para[last_end:start].strip()
-             if narration:
-                 segments.append((narration, "narrator"))
+    for match in pattern.finditer(para):
+        start, end = match.span()
+        # Add narration before the quote
+        if start > last_end:
+            narration = para[last_end:start].strip()
+            if narration:
+                segments.append((narration, "narrator"))
 
-         quote_text = match.group(2).strip()
-         if quote_text:
-             segments.append((quote_text, "character"))
+        quote_text = match.group(2).strip()
+        if quote_text:
+            segments.append((quote_text, "character"))
 
-         last_end = end
+        last_end = end
 
     # Add remaining narration after the last quote
-     if last_end < len(para):
-         tail = para[last_end:].strip()
-         if tail:
-             segments.append((tail, "narrator"))
+    if last_end < len(para):
+        tail = para[last_end:].strip()
+        if tail:
+            segments.append((tail, "narrator"))
 
-     return segments if segments else [(para.strip(), "narrator")]
+    return segments if segments else [(para.strip(), "narrator")]
 
-    # if not matches:
-    #     return [(para.strip(), "narrator")]
-
-    # # If no quotes are found, treat it as narration
-    # if not matches:
-    #     return [(para.strip(), "narrator")]
-
-    # # For each match (quote and tail), split the text
-    # for quote, quote_text, tail in matches:
-    #     if quote_text.strip():
-    #         segments.append((quote_text.strip(), "character"))  # dialogue part
-
-    #     if tail.strip():
-    #         segments.append((tail.strip(), "narrator"))  # narrative part
-
-    # return segments
-    
-    #if not matches:
-       # return [(para.strip(), "narrator")]
-
-   # for quote, quote_text, tail in matches:
-        #speaker = detect_speaker_name(tail)
-      #  segments.append((quote_text.strip(), speaker))
-
-     #   if tail:
-       #     segments.append((tail.strip(), "narrator"))
-
-    #return segments
 
 def assign_voice_for_speaker(name):
     if name not in character_voice_map:
@@ -139,6 +114,7 @@ def assign_voice_for_speaker(name):
         voice = random.choice(unused or available_voices)
         character_voice_map[name] = voice
     return character_voice_map[name]
+
 
 async def text_to_speech_with_speaker_attribution(full_text, output_path, translate=False, lang_code="es"):
     if translate:
@@ -188,6 +164,7 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
             else:
                 logging.warning(f"⚠️ Skipped missing audio file: {file}")
 
+
 def handle_message(update, context):
     chat_id = update.effective_chat.id
     url = update.message.text.strip()
@@ -206,7 +183,11 @@ def handle_message(update, context):
         [InlineKeyboardButton("Keep Original (English)", callback_data="original")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    bot.send_message(chat_id=chat_id, text="🌐 Do you want to translate the content before audio generation?", reply_markup=reply_markup)
+    bot.send_message(
+        chat_id=chat_id,
+        text="🌐 Do you want to translate the content before audio generation?",
+        reply_markup=reply_markup
+    )
 
 
 def handle_translation_choice(update, context):
@@ -215,7 +196,11 @@ def handle_translation_choice(update, context):
     choice = query.data
 
     bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-    bot.edit_message_text(chat_id=chat_id, message_id=query.message.message_id, text="📖 Processing your request...")
+    bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=query.message.message_id,
+        text="📖 Processing your request..."
+    )
 
     context_data = user_context.get(chat_id, {})
     slug = context_data.get("slug")
@@ -243,7 +228,11 @@ def handle_translation_choice(update, context):
                 f.write(content)
 
             bot.send_message(chat_id=chat_id, text="🔊 Generating audio...")
-            asyncio.run(text_to_speech_with_speaker_attribution(content, audio_file, translate=translate_flag, lang_code=lang_code))
+            asyncio.run(
+                text_to_speech_with_speaker_attribution(
+                    content, audio_file, translate=translate_flag, lang_code=lang_code
+                )
+            )
 
             bot.send_document(chat_id=chat_id, document=open(filename, "rb"))
             bot.send_audio(chat_id=chat_id, audio=open(audio_file, "rb"))
