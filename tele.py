@@ -76,25 +76,50 @@ def detect_speaker_name(tail):
     return 'unknown'
 
 def split_paragraph_with_speaker_attribution(para):
-    pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
-    matches = pattern.findall(para)
+     pattern = re.compile(r'([“"])(.+?)([”"])(?=\s|$)')  # Matches any quoted segment
+    #pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
+    #matches = pattern.findall(para)
     segments = []
-    if not matches:
-        return [(para.strip(), "narrator")]
+    last_end = 0
 
-    # If no quotes are found, treat it as narration
-    if not matches:
-        return [(para.strip(), "narrator")]
+    for match in pattern.finditer(para):
+        start, end = match.span()
+        # Add narration before the quote
+        if start > last_end:
+            narration = para[last_end:start].strip()
+            if narration:
+                segments.append((narration, "narrator"))
 
-    # For each match (quote and tail), split the text
-    for quote, quote_text, tail in matches:
-        if quote_text.strip():
-            segments.append((quote_text.strip(), "character"))  # dialogue part
+        quote_text = match.group(2).strip()
+        if quote_text:
+            segments.append((quote_text, "character"))
 
-        if tail.strip():
-            segments.append((tail.strip(), "narrator"))  # narrative part
+        last_end = end
 
-    return segments
+    # Add remaining narration after the last quote
+    if last_end < len(para):
+        tail = para[last_end:].strip()
+        if tail:
+            segments.append((tail, "narrator"))
+
+    return segments if segments else [(para.strip(), "narrator")]
+
+    # if not matches:
+    #     return [(para.strip(), "narrator")]
+
+    # # If no quotes are found, treat it as narration
+    # if not matches:
+    #     return [(para.strip(), "narrator")]
+
+    # # For each match (quote and tail), split the text
+    # for quote, quote_text, tail in matches:
+    #     if quote_text.strip():
+    #         segments.append((quote_text.strip(), "character"))  # dialogue part
+
+    #     if tail.strip():
+    #         segments.append((tail.strip(), "narrator"))  # narrative part
+
+    # return segments
     
     #if not matches:
        # return [(para.strip(), "narrator")]
