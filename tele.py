@@ -79,30 +79,30 @@ def split_paragraph_with_speaker_attribution(para):
      pattern = re.compile(r'([“"])(.+?)([”"])(?=\s|$)')  # Matches any quoted segment
     #pattern = re.compile(r'(["“](.*?)["”])([^\n]*)')
     #matches = pattern.findall(para)
-    segments = []
-    last_end = 0
+     segments = []
+     last_end = 0
 
-    for match in pattern.finditer(para):
-        start, end = match.span()
-        # Add narration before the quote
-        if start > last_end:
-            narration = para[last_end:start].strip()
-            if narration:
-                segments.append((narration, "narrator"))
+     for match in pattern.finditer(para):
+         start, end = match.span()
+         # Add narration before the quote
+         if start > last_end:
+             narration = para[last_end:start].strip()
+             if narration:
+                 segments.append((narration, "narrator"))
 
-        quote_text = match.group(2).strip()
-        if quote_text:
-            segments.append((quote_text, "character"))
+         quote_text = match.group(2).strip()
+         if quote_text:
+             segments.append((quote_text, "character"))
 
-        last_end = end
+         last_end = end
 
     # Add remaining narration after the last quote
-    if last_end < len(para):
-        tail = para[last_end:].strip()
-        if tail:
-            segments.append((tail, "narrator"))
+     if last_end < len(para):
+         tail = para[last_end:].strip()
+         if tail:
+             segments.append((tail, "narrator"))
 
-    return segments if segments else [(para.strip(), "narrator")]
+     return segments if segments else [(para.strip(), "narrator")]
 
     # if not matches:
     #     return [(para.strip(), "narrator")]
