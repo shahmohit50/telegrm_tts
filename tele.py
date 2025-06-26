@@ -87,26 +87,29 @@ def split_paragraph_with_speaker_attribution(para):
 
     for match in pattern.finditer(para):
         start, end = match.span()
-        # Add narration before the quote
+        
+        # Handle narration before the quote (if any)
         if start > last_end:
             narration = para[last_end:start].strip()
             if narration:
                 segments.append((narration, "narrator"))
 
+        # Add the quote as "character"
         quote_text = match.group(2).strip()
         if quote_text:
             segments.append((quote_text, "character"))
 
+        # Update last_end to the end of the current match
         last_end = end
 
-    # Add remaining narration after the last quote
+    # Handle remaining narration after the last quote
     if last_end < len(para):
         tail = para[last_end:].strip()
         if tail:
             segments.append((tail, "narrator"))
 
+    # If no quotes were found, return the whole text as narration
     return segments if segments else [(para.strip(), "narrator")]
-
 
 def assign_voice_for_speaker(name):
     if name not in character_voice_map:
