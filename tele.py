@@ -30,6 +30,37 @@ TARGET_NOVEL_KEYWORD = "Son of the Dragon"
 narrator_voice = "en-GB-LibbyNeural"
 detector = gender_detector.Detector(case_sensitive=False)
 
+# maps each emotion to a prosody tweak
+emotion_settings = {
+  "angry":      {"pitch":"+10%","rate":"+20%","volume":"+5%"},
+  "cheerful":   {"pitch":"+15%","rate":"+25%","volume":"+10%"},
+  "sad":        {"pitch":"-10%","rate":"-15%","volume":"-5%"},
+  "fearful":    {"pitch":"-5%","rate":"-20%","volume":"-10%"},
+  "serious":    {"pitch":"0%","rate":"0%","volume":"0%"},
+  "embarrassed":{"pitch":"-5%","rate":"-10%","volume":"-5%"},
+  # fallback
+  "narration-professional": {"pitch":"0%","rate":"0%","volume":"0%"},
+}
+
+# maps gender+emotion to one of your available voices
+emotion_voice_map = {
+  "male": {
+    "angry":       "en-US-GuyNeural",
+    "cheerful":    "en-US-DavisNeural",
+    "sad":         "en-GB-RyanNeural",
+    "fearful":     "en-US-GuyNeural",
+    "serious":     "en-GB-RyanNeural",
+    "embarrassed": "en-US-DavisNeural",
+  },
+  "female": {
+    "angry":       "en-US-JennyNeural",
+    "cheerful":    "en-AU-NatashaNeural",
+    "sad":         "en-US-AriaNeural",
+    "fearful":     "en-US-JennyNeural",
+    "serious":     "en-US-AriaNeural",
+    "embarrassed": "en-AU-NatashaNeural",
+  }
+}
 available_voices = [
     "en-US-GuyNeural",
     "en-US-DavisNeural",
@@ -184,10 +215,28 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
         temp_output = f"part_{i}.mp3"
         try:
             style = detect_emotion_style(sentence)
-            if style:
-                communicate = edge_tts.Communicate(sentence, voice=voice, style=style)
+            prosody = emotion_settings.get(style, emotion_settings["narration-professional"])
+            pitch, rate, volume = prosody["pitch"], prosody["rate"], prosody["volume"]
+
+            if speaker_name == "narrator":
+                voice = narrator_voice
             else:
-                communicate = edge_tts.Communicate(sentence, voice=voice)
+                gender = get_gender_clean(speaker_name)
+                voice = emotion_voice_map.get(gender, {}).get(style) \
+                    or assign_voice_for_speaker(speaker_name)
+            tts_kwargs = {
+                "text": sentence,
+                "voice": voice,
+            }
+            if pitch != "0%":
+                tts_kwargs["pitch"] = pitch
+            if rate != "0%":
+                tts_kwargs["rate"] = rate
+            if volume != "0%":
+                tts_kwargs["volume"] = volume
+
+            communicate = edge_tts.Communicate(**tts_kwargs)
+
             #communicate = edge_tts.Communicate(sentence, voice=voice)
             await communicate.save(temp_output)
 
