@@ -39,6 +39,30 @@ available_voices = [
     "en-AU-NatashaNeural",
     "en-IN-NeerjaNeural"
 ]
+
+emotion_keywords = {
+    "angry": ["shouted", "yelled", "snapped", "gritted", "barked"],
+    "cheerful": ["smiled", "laughed", "happily", "cheerfully"],
+    "sad": ["cried", "sobbed", "tearfully", "mourned"],
+    "fearful": ["trembled", "shivered", "whispered", "nervously"],
+    "serious": ["declared", "stated", "explained", "answered"],
+    "embarrassed": ["muttered", "blushed", "hesitated"]
+}
+
+def detect_emotion_style(text):
+    text = text.lower()
+    for style, keywords in emotion_keywords.items():
+        if any(word in text for word in keywords):
+            return style
+    return "narration-professional"
+# def detect_emotion_style(text):
+#     text = text.lower()
+#     for style, keywords in emotion_keywords.items():
+#         for word in keywords:
+#             if word in text:
+#                 return style
+#     return "narration-professional"  # default: no style
+
 character_voice_map = {}
 user_context = {}
 
@@ -67,7 +91,18 @@ def translate_text(text, target_lang="es"):
         logging.warning(f"Translation failed: {e}")
         return text
 
-
+def get_gender_clean(name):
+    if not name or name in ["he", "she", "they", "unknown", "girl", "boy", "old man"]:
+        return "unknown"
+    first = name.split()[0]
+    gender = detector.get_gender(first)
+    if gender in ("male", "mostly_male"):
+        return "male"
+    elif gender in ("female", "mostly_female"):
+        return "female"
+    else:
+        return "unknown"
+    
 def detect_speaker_name(tail):
     tail = tail.lower()
     name_match = re.search(r"(?:said|replied|asked|yelled|shouted|cried)\s+(\w+\s?\w*)", tail)
@@ -84,7 +119,7 @@ def split_paragraph_with_speaker_attribution(para):
     pattern = re.compile(r'([“"])(.+?)([”"])(?=\s|$)')  # Matches any quoted segment
     segments = []
     last_end = 0
-
+    
     for match in pattern.finditer(para):
         start, end = match.span()
         
@@ -148,7 +183,12 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
 
         temp_output = f"part_{i}.mp3"
         try:
-            communicate = edge_tts.Communicate(sentence, voice=voice)
+            style = detect_emotion_style(sentence)
+            if style:
+                communicate = edge_tts.Communicate(sentence, voice=voice, style=style)
+            else:
+                communicate = edge_tts.Communicate(sentence, voice=voice)
+            #communicate = edge_tts.Communicate(sentence, voice=voice)
             await communicate.save(temp_output)
 
             if os.path.exists(temp_output) and os.path.getsize(temp_output) > 100:
