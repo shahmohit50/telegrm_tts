@@ -97,6 +97,21 @@ def detect_emotion_style(text):
 character_voice_map = {}
 user_context = {}
 
+def clean_text_for_tts(text):
+    # Replace Unicode ellipsis (…) with three periods
+    text = text.replace("…", "...")
+
+    # Reduce repeated punctuation (e.g., !!!! or ???) to a single one
+    text = re.sub(r'([!?.,])\1+', r'\1', text)
+
+    # Fix hyphenated stutters like “G-Great” → “G... Great”
+    text = re.sub(r"\b([A-Za-z])-([A-Za-z])", r"\1... \2", text)
+
+    # Space out em-dashes to avoid parsing errors
+    text = text.replace("—", "— ")
+
+    return text
+
 
 def extract_slug_and_chapter(url):
     match = re.search(r'liddread\.com/([^/]+)-chapter-(\d+)/', url)
@@ -224,8 +239,10 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
                 gender = get_gender_clean(speaker_name)
                 voice = emotion_voice_map.get(gender, {}).get(style) \
                     or assign_voice_for_speaker(speaker_name)
+                
+            safe_sentence = clean_text_for_tts(sentence)
             tts_kwargs = {
-                "text": sentence,
+                "text": safe_sentence,
                 "voice": voice,
             }
             if pitch != "0%":
@@ -234,6 +251,7 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
                 tts_kwargs["rate"] = rate
             if volume != "0%":
                 tts_kwargs["volume"] = volume
+            
 
             communicate = edge_tts.Communicate(**tts_kwargs)
 
