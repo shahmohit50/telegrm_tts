@@ -5,6 +5,7 @@ import edge_tts
 import asyncio
 import re
 import random
+from bs4 import BeautifulSoup
 import json
 import html
 from flask import Flask, request
@@ -30,73 +31,6 @@ TARGET_NOVEL_KEYWORD = "Son of the Dragon"
 narrator_voice = "en-GB-LibbyNeural"
 detector = gender_detector.Detector(case_sensitive=False)
 
-# maps each emotion to a prosody tweak
-emotion_settings = {
-  "angry":      {"pitch":"+10%","rate":"+20%","volume":"+5%"},
-  "cheerful":   {"pitch":"+15%","rate":"+25%","volume":"+10%"},
-  "sad":        {"pitch":"-10%","rate":"-15%","volume":"-5%"},
-  "fearful":    {"pitch":"-5%","rate":"-20%","volume":"-10%"},
-  "serious":    {"pitch":"0%","rate":"0%","volume":"0%"},
-  "embarrassed":{"pitch":"-5%","rate":"-10%","volume":"-5%"},
-  # fallback
-  "narration-professional": {"pitch":"0%","rate":"0%","volume":"0%"},
-}
-
-# maps gender+emotion to one of your available voices
-emotion_voice_map = {
-  "male": {
-    "angry":       "en-US-GuyNeural",
-    "cheerful":    "en-US-DavisNeural",
-    "sad":         "en-GB-RyanNeural",
-    "fearful":     "en-US-GuyNeural",
-    "serious":     "en-GB-RyanNeural",
-    "embarrassed": "en-US-DavisNeural",
-  },
-  "female": {
-    "angry":       "en-US-JennyNeural",
-    "cheerful":    "en-AU-NatashaNeural",
-    "sad":         "en-US-AriaNeural",
-    "fearful":     "en-US-JennyNeural",
-    "serious":     "en-US-AriaNeural",
-    "embarrassed": "en-AU-NatashaNeural",
-  }
-}
-available_voices = [
-    "en-US-GuyNeural",
-    "en-US-DavisNeural",
-    "en-US-JennyNeural",
-    "en-US-AriaNeural",
-    "en-GB-RyanNeural",
-    "en-AU-NatashaNeural",
-    "en-IN-NeerjaNeural"
-]
-
-emotion_keywords = {
-    "angry": ["shouted", "yelled", "snapped", "gritted", "barked"],
-    "cheerful": ["smiled", "laughed", "happily", "cheerfully"],
-    "sad": ["cried", "sobbed", "tearfully", "mourned"],
-    "fearful": ["trembled", "shivered", "whispered", "nervously"],
-    "serious": ["declared", "stated", "explained", "answered"],
-    "embarrassed": ["muttered", "blushed", "hesitated"]
-}
-
-def detect_emotion_style(text):
-    text = text.lower()
-    for style, keywords in emotion_keywords.items():
-        if any(word in text for word in keywords):
-            return style
-    return "narration-professional"
-# def detect_emotion_style(text):
-#     text = text.lower()
-#     for style, keywords in emotion_keywords.items():
-#         for word in keywords:
-#             if word in text:
-#                 return style
-#     return "narration-professional"  # default: no style
-
-character_voice_map = {}
-user_context = {}
-
 def clean_text_for_tts(text):
     # Replace Unicode ellipsis (…) with three periods
     text = text.replace("…", "...")
@@ -109,9 +43,97 @@ def clean_text_for_tts(text):
 
     # Space out em-dashes to avoid parsing errors
     text = text.replace("—", "— ")
-
+    text = text.replace("…", ", ")
     return text
 
+# maps each emotion to a prosody tweak
+emotion_settings = {
+    "angry": {"pitch": "+10Hz", "rate": "+20%", "volume": "+5%"},
+    "cheerful": {"pitch": "+15Hz", "rate": "+25%", "volume": "+10%"},
+    "sad": {"pitch": "-10Hz", "rate": "-15%", "volume": "-5%"},
+    "fearful": {"pitch": "-5Hz", "rate": "-20%", "volume": "-10%"},
+    "serious": {"pitch": "+3Hz", "rate": "0%", "volume": "+8%"},
+    "embarrassed": {"pitch": "-5Hz", "rate": "-10%", "volume": "-5%"},
+    "evil": {"pitch": "-15Hz", "rate": "-20%", "volume": "-10%"},
+    "narration-professional": {"pitch": "+1Hz", "rate": "0%", "volume": "0%"}
+}
+
+
+# maps gender+emotion to one of your available voices
+emotion_voice_map = {
+    "male": {
+        "angry": "en-US-GuyNeural",
+        "cheerful": "en-US-DavisNeural",
+        "sad": "en-GB-RyanNeural",
+        "fearful": "en-US-GuyNeural",
+        "serious": "en-GB-RyanNeural",
+        "embarrassed": "en-US-DavisNeural",
+        "evil": "en-IN-NeerjaNeural"  # Pick a deeper, colder tone
+    },
+    "female": {
+        "angry": "en-US-JennyNeural",
+        "cheerful": "en-AU-NatashaNeural",
+        "sad": "en-US-AriaNeural",
+        "fearful": "en-US-JennyNeural",
+        "serious": "en-US-AriaNeural",
+        "embarrassed": "en-AU-NatashaNeural",
+        "evil": "en-IN-NeerjaNeural"
+    }
+}
+
+
+available_voices = [
+    "en-US-GuyNeural",
+    "en-US-DavisNeural",
+    "en-US-JennyNeural",
+    "en-US-AriaNeural",
+    "en-GB-RyanNeural",
+    "en-AU-NatashaNeural"
+]
+
+
+emotion_keywords = {
+    "angry": [
+        "roared", "snorted", "snarled", "barked", "gritted", "how dare", "furious", "rage",
+        "trembled with rage", "thundered", "boomed", "fumed", "bellowed", "exploded", "burned with anger"
+    ],
+    "cheerful": [
+        "laughed", "chuckling", "smiled", "scoffed", "grinned", "mocked", "teased",
+        "smirked", "snickered", "joked", "boasted", "bragged", "playfully"
+    ],
+    "sad": [
+        "cried", "sobbed", "mourned", "tearfully", "blood spilling from his lips",
+        "lamented", "despaired", "melancholy", "grief", "regret", "disheartened", "sorrowful"
+    ],
+    "fearful": [
+        "trembled", "shivered", "stared in shock", "growing fear", "horrified", "unsettled", "unnerved",
+        "flinched", "cowered", "panicked", "paled", "frozen with fear", "felt a chill", "goosebumps"
+    ],
+    "serious": [
+        "declared", "stated", "explained", "answered", "resolute glint", "grave expression",
+        "said solemnly", "firm tone", "unwavering", "stern", "matter-of-fact", "pronounced"
+    ],
+    "embarrassed": [
+        "scratched his head", "blushed", "hesitated", "awkwardly", "fumbled", "stammered",
+        "muttered", "looked away", "sheepishly"
+    ],
+    "evil": [
+        "sinister cackle", "possessed", "frenzied roar", "ancient evil", "corroding", "ghostly",
+        "corpse qi", "bloodthirsty smile", "malevolent grin", "wicked", "demonic qi", "cackled wickedly",
+        "inhuman", "corrosive aura", "vile energy", "fiendish", "foul aura"
+    ]
+}
+
+
+def detect_emotion_style(text):
+    text = text.lower()
+    for style, keywords in emotion_keywords.items():
+        if any(word in text for word in keywords):
+            return style
+    return "narration-professional"
+
+character_voice_map = {}
+user_context = {}
 
 def extract_slug_and_chapter(url):
     match = re.search(r'liddread\.com/([^/]+)-chapter-(\d+)/', url)
@@ -121,14 +143,31 @@ def extract_slug_and_chapter(url):
         return slug, chapter
     return None, None
 
-
 def scrape_content(url):
     g = Goose()
     article = g.extract(url=url)
     title = article.title or "No Title"
-    content = article.cleaned_text or "Content not found."
-    return title.strip(), content.strip()
+    soup = BeautifulSoup(article.raw_html, "html.parser")
+    content_div = (
+        soup.find("div", class_="chapter-content") or
+        soup.find("div", class_="content") or
+        soup.find("div", class_="post-content") or
+        soup.find("div", class_="entry-content")  # add more known patterns as needed
+    )
 
+    lines = []
+    if content_div:
+        for p in content_div.find_all(["p", "br"]):
+            text = p.get_text(strip=True)
+            if text:
+                lines.append(text)
+    else:
+        # Fallback: Use Goose's cleaned_text as last resort
+        raw_text = article.cleaned_text or ""
+        lines = raw_text.splitlines()
+
+    content = "\n".join(lines) if lines else "Content not found."
+    return title.strip(), content.strip()
 
 def translate_text(text, target_lang="es"):
     try:
@@ -245,7 +284,7 @@ async def text_to_speech_with_speaker_attribution(full_text, output_path, transl
                 "text": safe_sentence,
                 "voice": voice,
             }
-            if pitch != "0%":
+            if pitch != "0Hz":
                 tts_kwargs["pitch"] = pitch
             if rate != "0%":
                 tts_kwargs["rate"] = rate

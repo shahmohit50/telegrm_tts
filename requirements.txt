@@ -6,5 +6,5 @@ flask
 goose3
 gender-guesser
 deep-translator
-
+bs4
 
